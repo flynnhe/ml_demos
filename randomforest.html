@@ -1,0 +1,273 @@
+
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <title>Random Forest in JS</title>
+  <meta name="verify-v1" content="8Fcv4zU4kEpmqFt1JgX8TNobfjaWLWwA7/MpesGh5B4=" />
+  <link rel="stylesheet" media="screen" type="text/css" href="http://www.helenflynn.com/style.css" />
+  <link rel="stylesheet" media="screen" type="text/css" href="js/jquery-ui/jquery-ui.css" />
+  <link rel="shortcut icon" href="http://www.helenflynn.com/favicon.ico" type="image/x-icon">
+  <!--[if IE]><meta http-equiv="imagetoolbar" content="no" /><meta http-equiv="X-UA-Compatible" content="IE=8" /><![endif]-->
+  <script src="js/jquery-1.12.1.js"></script>
+  <script src="js/jquery-ui/jquery-ui.js"></script>
+  <script src="js/randomforest.js"></script>
+  <script type="text/javascript">
+
+    document.addEventListener("DOMContentLoaded", init, false);
+
+    var canvas;
+    var canvasWidth;
+    var canvasHeight;
+    var ctx;
+    var canvasData;
+    var scaleFactor = 50;
+    var transX;
+    var transY;
+    var shiftPressed = false;
+
+    var points = [];
+    var forest;
+    var numTrees;
+    var maxDepth;
+    var numHypotheses;
+    var posMode;
+
+    function init() {
+      canvas = document.getElementById("canvas");
+      canvasWidth = canvas.width;
+      canvasHeight = canvas.height;
+      ctx = canvas.getContext("2d");
+      transX = canvasWidth * 0.5;
+      transY = canvasHeight * 0.5;
+      ctx.translate(transX, transY);
+      canvasData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+
+      canvas.addEventListener("mousedown", onMouseDown, false);
+
+      posMode = true; // add positive examples by default
+      numTrees = 100;
+      maxDepth = 4;
+      numHypotheses = 10;
+      $('#textNumTrees').text(numTrees);
+      $('#textMaxDepth').text(maxDepth);
+      $('#textNumHypotheses').text(numHypotheses);
+      forest = new RandomForest(numTrees, maxDepth, numHypotheses);
+
+      // generate some random examples
+      addPoint(-4, -3, 1);
+      addPoint(-2, -1, 1);
+      addPoint(2, 2, 1);
+      addPoint(4, 4, 1);
+      addPoint(-4.5, 2.5, -1);
+      addPoint(-4, 3, -1);
+      addPoint(-3.5, 3.5, -1);
+      addPoint(3, -3, -1);
+      addPoint(3.5, -2, -1);
+      addPoint(4, -1, -1);
+
+      forest.train(points);
+
+      $(function() {
+        $( "#sliderNumTrees" ).slider({
+          step: 1,
+          min: 1,
+          max: 200,
+          value: 100,
+          change: function(event, ui){
+              numTrees = $(this).slider("option", "value");
+              $('#textNumTrees').text(numTrees);
+              forest = new RandomForest(numTrees, maxDepth, numHypotheses);
+              forest.train(points);
+              drawBackground(forest);
+              drawPoints();
+          },
+          slide: function(event, ui){
+              numTrees = $(this).slider("option", "value");
+              $('#textNumTrees').text(ui.value);
+          }
+        });
+        $( "#sliderMaxDepth" ).slider({
+          step: 1,
+          min: 1,
+          max: 10,
+          value: 4,
+          change: function(event, ui){
+              maxDepth = $(this).slider("option", "value");
+              forest = new RandomForest(numTrees, maxDepth, numHypotheses);
+              forest.train(points);
+              drawBackground(forest);
+              drawPoints();
+          },
+          slide: function(event, ui){
+              maxDepth = $(this).slider("option", "value");
+              $("#textMaxDepth").text(ui.value);
+          }
+        });
+        $( "#sliderNumHypotheses" ).slider({
+          step: 1,
+          min: 1,
+          max: 20,
+          value: 10,
+          change: function(event, ui){
+              numHypotheses = $(this).slider("option", "value");
+              forest = new RandomForest(numTrees, maxDepth, numHypotheses);
+              forest.train(points);
+              drawBackground(forest);
+              drawPoints();
+          },
+          slide: function(event, ui){
+              numHypotheses = $(this).slider("option", "value");
+              $('#textNumHypotheses').text(ui.value);
+          }
+        });
+      });
+
+      $(window).keypress(function (e) {
+        if (e.keyCode === 0 || e.keyCode === 32) {
+          posMode = !posMode;
+        }
+      })
+      
+      drawBackground(forest);
+      drawPoints();
+    }
+
+    function drawPoints() {
+      var N = points.length;
+      for (var i = 0; i < N; i++) {
+        if (points[i].label == 1) {
+          color = 'green';
+        }
+        else {
+          color = 'red';
+        }
+        drawCircle(points[i].x*scaleFactor, points[i].y*scaleFactor, 4, color);
+      }
+      updateError();
+    }
+
+    function drawBackground(forest) {
+      var res = 10; // canvas resolution
+      // color each pixel according to class membership
+      for (var i = 0; i <= canvasHeight; i+=res) {
+        for (var j = 0; j <= canvasWidth; j+=res) {
+          var label = forest.predict((j-transX)/scaleFactor, (i-transY)/scaleFactor);
+          var nlabel = (label + 1) / 2;
+          var red = 206*(1-nlabel) + 58*nlabel;//rgb(206,58,58)
+          var green= 206*nlabel + 58*(1-nlabel);
+          ctx.fillStyle = 'rgb(' + Math.floor(red) + ',' + Math.floor(green) + ',58)';
+          ctx.fillRect(j-transX-res/2-1, i-transY-res-1, res+2, res+2);
+        }
+      }
+    }
+
+    function drawCircle(centerX, centerY, radius, color) {
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI, false);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    function addPoint(a, b, c) {
+      points.push({x:a, y:b, label:c});
+    }
+
+    function updateError() {
+      ctx.fillStyle = 'black';
+      ctx.font = "12px Arial";
+      ctx.fillText("Misclassification error: " + forest.computeError(points).toFixed(4),-240, -230);
+    }
+
+    $(document).keypress(function(e) {
+      if(e.which == 114) {
+        forest.train(points);
+	drawBackground(forest);
+	drawPoints();
+        updateError(); 
+      }
+    });
+
+    function onMouseDown(event) {
+      var x = event.x;
+      var y = event.y;
+      x -= canvas.offsetLeft;
+      x -= transX;
+      y -= canvas.offsetTop;
+      y -= transY;
+      if (!event.shiftKey) {
+        addPoint(x/scaleFactor, y/scaleFactor, 1);
+        drawCircle(x, y, 4, 'green');
+      }
+      else {
+        addPoint(x/scaleFactor, y/scaleFactor, -1);
+        drawCircle(x, y, 4, 'red');
+      }
+      forest.train(points);
+      drawBackground(forest);
+      drawPoints();
+      updateError();
+    }
+
+  </script>
+</head>
+
+<body>
+
+  <div id="main">
+    <div>
+      <h1>Random forest demo in pure JS</h1>
+      <h3>This is a demo of a random forest applied to the problem of binary classification of 2D points. Use the slider bars below to see the effect of various parameters on the classification accuracy.</h3>
+    </div>
+    <div style="width: 1000px">
+      <div style="float: left; width: 250px; height: 500px">
+        Left-click the mouse inside the image to add a new positive point. Shift + left click to add a new negative point. Press 'r' to retrain the forest.
+      </div>
+      <!-- Canvas to show the classified points -->
+      <div style="float: left; width: 500px; margin: 0 auto; padding: 5px;"><canvas id="canvas" width="500" height="500" style="border:1px solid #000000;"></canvas></div>
+      <div style="float: left; width: 240px">
+        <div class="slider">Num trees: <span id="textNumTrees"></span></div>
+        <div id="sliderNumTrees"></div>
+        <div class="slider">Max tree depth: <span id="textMaxDepth"></span></div>
+        <div id="sliderMaxDepth"></div>
+        <div class="slider">Num hypotheses: <span id="textNumHypotheses"></span></div>
+        <div id="sliderNumHypotheses"></div>
+ 	<div class="param_desc">
+        <li><strong>Num trees</strong> specifies how many trees are in the forest. The final result is obtained by averaging the results of all trees.</li>
+        <li><strong>Max tree depth</strong> specifies how many levels per binary decision tree. More is generally better but two many levels will result in overfitting.</li>
+        <li><strong>Num hypotheses</strong> specifies how many random hypotheses should be generated at each decision node, where the hypthesis having the highest information gain is ultimately chosen. Higher is generally better but too high will result in overfitting.</li>
+	</div>
+      </div>
+      <br style="clear: left;" />
+      <div style="text-align: center; width: 1000px; margin: 0 auto; font-size: 14px;">
+        Random forests are a collection of decision trees, each of which is trained on a subset of the training data and using a subset of the input features. Given a new input, each tree makes a decision which on its own is not highly accurate at classifying the whole data set. However, when you combine the predictions of many decision trees you get a very powerful classifier. Feel free to fork this code on <a href="https://github.com/flynnhe">Github</a>.
+     </div>
+    </div>
+  </div>
+
+<a href="https://github.com/flynnhe"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/52760788cde945287fbb584134c4cbc2bc36f904/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f77686974655f6666666666662e706e67" alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_white_ffffff.png"></a>
+
+  <!-- Google Analytics -->
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o),
+        m = s.getElementsByTagName(o)[0];
+      a.async = 1;
+      a.src = g;
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
+
+    ga('create', 'UA-24759090-1', 'auto');
+    ga('send', 'pageview');
+  </script>
+  <!-- End Google Analytics -->
+</body>
+
+</html>
