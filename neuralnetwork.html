@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <title>Helen Flynn</title>
+  <meta name="verify-v1" content="8Fcv4zU4kEpmqFt1JgX8TNobfjaWLWwA7/MpesGh5B4=" />
+  <link rel="stylesheet" media="screen" type="text/css" href="http://www.helenflynn.com/style.css"
+  />
+  <link rel="stylesheet" media="screen" type="text/css" href="js/jquery-ui/jquery-ui.css"
+  />
+  <link rel="shortcut icon" href="http://www.helenflynn.com/favicon.ico" type="image/x-icon">
+  <!--[if IE]><meta http-equiv="imagetoolbar" content="no" /><meta http-equiv="X-UA-Compatible" content="IE=8" /><![endif]-->
+  <script src="js/jquery-1.12.1.js"></script>
+  <script src="js/jquery-ui/jquery-ui.js"></script>
+  <script src="js/neuralnetwork.js"></script>
+  <script type="text/javascript">
+    //document.addEventListener("DOMContentLoaded", init, false);
+
+    var canvas;
+    var canvasWidth;
+    var canvasHeight;
+    var ctx;
+    var canvasData;
+    var scaleFactor = 120;
+    var transX;
+    var transY;
+
+    var points = [];
+    var nn;
+    var numHiddenLayers;
+    var numUnitsPerLayer;
+    var activateFn;
+    var init = false;
+
+    $(function() {
+      canvas = document.getElementById("canvas");
+      canvasWidth = canvas.width;
+      canvasHeight = canvas.height;
+      ctx = canvas.getContext("2d");
+      transX = canvasWidth * 0.5;
+      transY = canvasHeight * 0.5;
+      ctx.translate(transX, transY);
+      canvasData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+
+      canvas.addEventListener("mousedown", onMouseDown, false);
+
+      // generate a noisy sine function
+      numExamples = 30;
+      for (var i = 1; i <= numExamples; i++) {
+        var val = 2 * i * Math.PI / numExamples;
+        points.push({
+          x: val,
+          y: Math.sin(val) + 0.3 * Math.random()
+        });
+      }
+
+      // normalize the points to have mean 0 and unit variance
+      points = normalize(points);
+
+      numHiddenLayers = 1;
+      numUnitsPerLayer = 4;
+      activateFn = 'tanh';
+      nn = new NeuralNetwork(numHiddenLayers, numUnitsPerLayer, activateFn);
+      init = true;
+      $('#textNumHiddenLayers').text(numHiddenLayers);
+      $('#textNumUnits').text(numUnitsPerLayer);
+
+      $(function() {
+        $("#sliderHiddenLayers").slider({
+          step: 1,
+          min: 0,
+          max: 5,
+          value: 1,
+          change: function(event, ui) {
+            numHiddenLayers = $(this).slider('values', 0);
+            $('#textNumHiddenLayers').text(numHiddenLayers);
+            if (init) {
+              nn = new NeuralNetwork(numHiddenLayers,
+                numUnitsPerLayer, activateFn);
+              drawPoints();
+            }
+          },
+          slide: function(event, ui) {
+            numHiddenLayers = $(this).slider('values', 0);
+            $('#textNumHiddenLayers').text(numHiddenLayers);
+          }
+        });
+        $("#sliderUnitsPerLayer").slider({
+          step: 1,
+          min: 1,
+          max: 10,
+          value: numUnitsPerLayer,
+          change: function(event, ui) {
+            numUnitsPerLayer = $(this).slider('values', 0);
+            $('#textNumUnits').text(numUnitsPerLayer);
+            if (init) {
+              nn = new NeuralNetwork(numHiddenLayers,
+                numUnitsPerLayer, activateFn);
+              drawPoints();
+            }
+          },
+          slide: function(event, ui) {
+            numUnitsPerLayer = $(this).slider('values', 0);
+            $('#textNumUnits').text(numUnitsPerLayer);
+          }
+        });
+      });
+
+      $('input:radio[name="labActivateFn"]').change(function() {
+        var radioValue = $("input[name='labActivateFn']:checked").val();
+        activateFn = radioValue;
+        nn.activateFn = radioValue;
+      });
+
+      drawPoints();
+    });
+
+    function drawPoints() {
+      var N = points.length;
+      for (var i = 0; i < N; i++) {
+        color = 'grey';
+        drawCircle(points[i].x * scaleFactor, points[i].y * scaleFactor, 3,
+          color);
+      }
+      var xmin = -canvasWidth / 2;
+      var xmax = canvasWidth / 2;
+      var ymin = -canvasHeight / 2;
+      var ymax = canvasHeight / 2;
+      ctx.beginPath();
+      ctx.fillStyle = 'red';
+      ctx.moveTo(xmin, 0);
+      ctx.lineTo(xmax, 0);
+      ctx.moveTo(0, ymin);
+      ctx.lineTo(0, ymax);
+      ctx.strokeStyle = '#C0C0C0';
+      ctx.stroke();
+    }
+
+    function mainLoop(timer) {
+      if (init) {
+        nn.trainOneEpoch(points);
+        drawNNPrediction();
+      }
+      requestAnimationFrame(mainLoop);
+    }
+
+    requestAnimationFrame(mainLoop);
+
+    function drawNNPrediction() {
+      clearCanvas();
+      drawPoints();
+      for (var i = -2; i <= 2; i += 0.005) {
+        var y = nn.predict(i);
+        color = 'blue';
+        drawCircle(i * scaleFactor, y * scaleFactor, 1.0, color);
+      }
+      updateStats();
+    }
+
+    function clearCanvas() {
+      // Store the current transformation matrix
+      ctx.save();
+
+      // Use the identity matrix while clearing the canvas
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+      // Restore the transform
+      ctx.restore();
+    }
+
+    function drawCircle(centerX, centerY, radius, color) {
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI, false);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    function addPoint(a, b, c) {
+      points.push({
+        x: a,
+        y: b,
+        label: c
+      });
+    }
+
+    function updateStats() {
+      ctx.fillStyle = 'black';
+      ctx.font = "12px Arial";
+      ctx.fillText("Average loss: " + nn.avgError.toFixed(4), -240, -230);
+      ctx.fillText("Num epochs: " + nn.currEpoch, -240, -210);
+    }
+
+    function onMouseDown(event) {
+      var x = event.x;
+      var y = event.y;
+      x -= canvas.offsetLeft;
+      x -= transX;
+      y -= canvas.offsetTop;
+      y -= transY;
+      addPoint(x / scaleFactor, y / scaleFactor, -1);
+      drawCircle(x, y, 4, 'black');
+      drawPoints();
+      updateStats();
+    }
+  </script>
+</head>
+
+<body>
+
+  <div id="main">
+    <div>
+      <h1>Neural network demo in pure JS</h1>
+      <h3>This is a demo of a neural network applied to the problem of prediction a polynomial function from a set of points. Use the slider bars below to see the effect of various parameters on the classification accuracy.</h3>
+    </div>
+    <div style="width: 1000px">
+      <div style="float: left; width: 250px; height: 500px">
+        Left-click the mouse inside the image to add a new point.
+      </div>
+      <!-- Canvas to show the classified points -->
+      <div style="float: left; width: 500px; margin: 0 auto; padding: 5px;"><canvas id="canvas" width="500" height="500" style="border:1px solid #000000;"></canvas></div>
+      <div style="float: left; width: 240px">
+        <div class="slider">Num hidden layers: <span id="textNumHiddenLayers"></span></div>
+        <div id="sliderHiddenLayers"></div>
+        <div class="slider">Num units per hidden layer: <span id="textNumUnits"></span></div>
+        <div id="sliderUnitsPerLayer"></div>
+        <div class="slider">Activation function: <span id="textActivationFn"></span></div>
+        <div>
+          <label><input type="radio" name="labActivateFn" value="linear">Linear</label>
+          <label><input type="radio" name="labActivateFn" value="tanh" checked="checked">Tanh</label>
+          <label><input type="radio" name="labActivateFn" value="sigmoid">Sigmoid</label>
+        </div>
+      </div>
+      <br style="clear: left;" />
+      <div style="text-align: center; width: 1000px; margin: 0 auto; font-size: 14px;">
+        Fork this code on <a href="https://github.com/flynnhe">Github</a>.
+      </div>
+    </div>
+  </div>
+
+  <a href="https://github.com/flynnhe"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://camo.githubusercontent.com/52760788cde945287fbb584134c4cbc2bc36f904/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f77686974655f6666666666662e706e67"
+      alt="Fork me on GitHub" data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_white_ffffff.png"></a>
+
+
+  <!-- Google Analytics -->
+  <script>
+    (function(i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r;
+      i[r] = i[r] || function() {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date();
+      a = s.createElement(o),
+        m = s.getElementsByTagName(o)[0];
+      a.async = 1;
+      a.src = g;
+      m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', '//www.google-analytics.com/analytics.js',
+      'ga');
+
+    ga('create', 'UA-24759090-1', 'auto');
+    ga('send', 'pageview');
+  </script>
+  <!-- End Google Analytics -->
+</body>
+
+</html>
