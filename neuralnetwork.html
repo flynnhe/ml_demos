@@ -5,11 +5,11 @@
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
   <title>Helen Flynn</title>
   <meta name="verify-v1" content="8Fcv4zU4kEpmqFt1JgX8TNobfjaWLWwA7/MpesGh5B4=" />
-  <link rel="stylesheet" media="screen" type="text/css" href="http://www.helenflynn.com/style.css"
+  <link rel="stylesheet" media="screen" type="text/css" href="style.css"
   />
   <link rel="stylesheet" media="screen" type="text/css" href="js/jquery-ui/jquery-ui.css"
   />
-  <link rel="shortcut icon" href="http://www.helenflynn.com/favicon.ico" type="image/x-icon">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
   <!--[if IE]><meta http-equiv="imagetoolbar" content="no" /><meta http-equiv="X-UA-Compatible" content="IE=8" /><![endif]-->
   <script src="js/jquery-1.12.1.js"></script>
   <script src="js/jquery-ui/jquery-ui.js"></script>
@@ -28,10 +28,14 @@
 
     var points = [];
     var nn;
+    var lrRate;
     var numHiddenLayers;
     var numUnitsPerLayer;
     var activateFn;
     var init = false;
+    var now, then;
+    var fps = 25;
+    var fpsInterval = 1000 / fps;
 
     $(function() {
       canvas = document.getElementById("canvas");
@@ -44,6 +48,9 @@
       canvasData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
 
       canvas.addEventListener("mousedown", onMouseDown, false);
+
+      then = Date.now();
+      startTime = then;
 
       // generate a noisy sine function
       numExamples = 30;
@@ -59,24 +66,26 @@
       points = normalize(points);
 
       numHiddenLayers = 1;
-      numUnitsPerLayer = 4;
+      numUnitsPerLayer = 5;
+      lrRate = 1;
       activateFn = 'tanh';
-      nn = new NeuralNetwork(numHiddenLayers, numUnitsPerLayer, activateFn);
+      nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers, numUnitsPerLayer, activateFn);
       init = true;
       $('#textNumHiddenLayers').text(numHiddenLayers);
       $('#textNumUnits').text(numUnitsPerLayer);
+      $('#textLearningRate').text(lrRate*0.005);
 
       $(function() {
         $("#sliderHiddenLayers").slider({
           step: 1,
           min: 0,
-          max: 5,
+          max: 3,
           value: 1,
           change: function(event, ui) {
             numHiddenLayers = $(this).slider('values', 0);
             $('#textNumHiddenLayers').text(numHiddenLayers);
             if (init) {
-              nn = new NeuralNetwork(numHiddenLayers,
+              nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers,
                 numUnitsPerLayer, activateFn);
               drawPoints();
             }
@@ -95,7 +104,7 @@
             numUnitsPerLayer = $(this).slider('values', 0);
             $('#textNumUnits').text(numUnitsPerLayer);
             if (init) {
-              nn = new NeuralNetwork(numHiddenLayers,
+              nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers,
                 numUnitsPerLayer, activateFn);
               drawPoints();
             }
@@ -105,12 +114,37 @@
             $('#textNumUnits').text(numUnitsPerLayer);
           }
         });
+        $("#sliderLearningRate").slider({
+          step: 1,
+          min: 1,
+          max: 30,
+          value: lrRate,
+          change: function(event, ui) {
+            lrRate = $(this).slider('values', 0);
+            $('#textLearningRate').text(lrRate*0.005);
+            if (init) {
+              //nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers,
+              //  numUnitsPerLayer, activateFn);
+              nn.setLrRate(lrRate*0.005);
+              drawPoints();
+            }
+          },
+          slide: function(event, ui) {
+            lrRate = $(this).slider('values', 0);
+            $('#textLearningRate').text(lrRate*0.005);
+          }
+        });
       });
 
       $('input:radio[name="labActivateFn"]').change(function() {
         var radioValue = $("input[name='labActivateFn']:checked").val();
         activateFn = radioValue;
         nn.activateFn = radioValue;
+	if (init) {
+              nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers,
+                numUnitsPerLayer, activateFn);
+              drawPoints();
+	}
       });
 
       drawPoints();
@@ -140,9 +174,18 @@
     function mainLoop(timer) {
       if (init) {
         nn.trainOneEpoch(points);
-        drawNNPrediction();
+//        drawNNPrediction();
       }
       requestAnimationFrame(mainLoop);
+      now = Date.now();
+      elapsed = now - then;
+      if (elapsed > fpsInterval) {
+        then = now - (elapsed % fpsInterval);
+
+        if (init) {
+          drawNNPrediction();
+        }
+      }
     }
 
     requestAnimationFrame(mainLoop);
@@ -220,6 +263,8 @@
       </div>
       <div style="float: left; width: 500px; margin: 0 auto; padding: 5px;"><canvas id="canvas" width="500" height="500" style="border:1px solid #000000;"></canvas></div>
       <div style="float: left; width: 240px">
+        <div class="slider">Learning rate: <span id="textLearningRate"></span></div>
+        <div id="sliderLearningRate"></div>
         <div class="slider">Num hidden layers: <span id="textNumHiddenLayers"></span></div>
         <div id="sliderHiddenLayers"></div>
         <div class="slider">Num units per hidden layer: <span id="textNumUnits"></span></div>
@@ -229,6 +274,9 @@
           <label><input type="radio" name="labActivateFn" value="linear">Linear</label>
           <label><input type="radio" name="labActivateFn" value="tanh" checked="checked">Tanh</label>
           <label><input type="radio" name="labActivateFn" value="sigmoid">Sigmoid</label>
+        </div>
+        <div>
+          With more layers/hidden nodes you should start to see the network overfit the training points. Also, be aware that the larger the network, the longer it takes to train - so be patient!
         </div>
       </div>
       <br style="clear: left;" />
