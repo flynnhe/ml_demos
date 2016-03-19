@@ -53,39 +53,43 @@
       startTime = then;
 
       // generate a noisy sine function
-      numExamples = 30;
+      numExamples = 10;
       for (var i = 1; i <= numExamples; i++) {
         var val = 2 * i * Math.PI / numExamples;
         points.push({
           x: val,
-          y: Math.sin(val) + 0.3 * Math.random()
+          x2: val*val,
+          x3: val*val*val,
+          x4: val*val*val*val,
+          y: Math.sin(val) + 0.2 * Math.random()
         });
       }
 
       // normalize the points to have mean 0 and unit variance
       points = normalize(points);
 
-      numHiddenLayers = 1;
-      numUnitsPerLayer = 5;
+      numHiddenLayers = 2;
+      numUnitsPerLayer = 15;
       lrRate = 1;
+      lrMult = 0.0005;
       activateFn = 'tanh';
-      nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers, numUnitsPerLayer, activateFn);
+      nn = new NeuralNetwork(Math.pow(2, lrRate)*lrMult, numHiddenLayers, numUnitsPerLayer, activateFn);
       init = true;
       $('#textNumHiddenLayers').text(numHiddenLayers);
       $('#textNumUnits').text(numUnitsPerLayer);
-      $('#textLearningRate').text(lrRate*0.005);
+      $('#textLearningRate').text(Math.pow(2, lrRate)*lrMult);
 
       $(function() {
         $("#sliderHiddenLayers").slider({
           step: 1,
           min: 0,
-          max: 3,
-          value: 1,
+          max: 4,
+          value: numHiddenLayers,
           change: function(event, ui) {
             numHiddenLayers = $(this).slider('values', 0);
             $('#textNumHiddenLayers').text(numHiddenLayers);
             if (init) {
-              nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers,
+              nn = new NeuralNetwork(Math.pow(2, lrRate)*lrMult, numHiddenLayers,
                 numUnitsPerLayer, activateFn);
               drawPoints();
             }
@@ -98,13 +102,13 @@
         $("#sliderUnitsPerLayer").slider({
           step: 1,
           min: 1,
-          max: 10,
+          max: 20,
           value: numUnitsPerLayer,
           change: function(event, ui) {
             numUnitsPerLayer = $(this).slider('values', 0);
             $('#textNumUnits').text(numUnitsPerLayer);
             if (init) {
-              nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers,
+              nn = new NeuralNetwork(Math.pow(2, lrRate)*lrMult, numHiddenLayers,
                 numUnitsPerLayer, activateFn);
               drawPoints();
             }
@@ -116,22 +120,20 @@
         });
         $("#sliderLearningRate").slider({
           step: 1,
-          min: 1,
-          max: 30,
+          min: 0,
+          max: 10,
           value: lrRate,
           change: function(event, ui) {
             lrRate = $(this).slider('values', 0);
-            $('#textLearningRate').text(lrRate*0.005);
+            $('#textLearningRate').text(Math.pow(2, lrRate)*lrMult);
             if (init) {
-              //nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers,
-              //  numUnitsPerLayer, activateFn);
-              nn.setLrRate(lrRate*0.005);
+              nn.setLrRate(Math.pow(2, lrRate)*lrMult);
               drawPoints();
             }
           },
           slide: function(event, ui) {
             lrRate = $(this).slider('values', 0);
-            $('#textLearningRate').text(lrRate*0.005);
+            $('#textLearningRate').text(Math.pow(2, lrRate)*lrMult);
           }
         });
       });
@@ -141,7 +143,7 @@
         activateFn = radioValue;
         nn.activateFn = radioValue;
 	if (init) {
-              nn = new NeuralNetwork(lrRate*0.005, numHiddenLayers,
+              nn = new NeuralNetwork(Math.pow(2, lrRate)*lrMult, numHiddenLayers,
                 numUnitsPerLayer, activateFn);
               drawPoints();
 	}
@@ -174,7 +176,6 @@
     function mainLoop(timer) {
       if (init) {
         nn.trainOneEpoch(points);
-//        drawNNPrediction();
       }
       requestAnimationFrame(mainLoop);
       now = Date.now();
@@ -193,7 +194,7 @@
     function drawNNPrediction() {
       clearCanvas();
       drawPoints();
-      for (var i = -2; i <= 2; i += 0.005) {
+      for (var i = -2; i <= 2; i += 0.0011) {
         var y = nn.predict(i);
         color = 'blue';
         drawCircle(i * scaleFactor, y * scaleFactor, 1.0, color);
@@ -255,7 +256,7 @@
   <div id="main">
     <div>
       <h1>Neural network demo in pure JS</h1>
-      <h3>This is a demo of a neural network applied to the problem of prediction a polynomial function from a set of points. Use the slider bars below to see the effect of various parameters on the function approximation.</h3>
+      <h3>This is a demo of a neural network applied to the problem of learning a polynomial function given a set of noisy points sampled from that function. Use the slider bars below to see the effect of various parameters on the function approximation.</h3>
     </div>
     <div style="width: 1000px">
       <div style="float: left; width: 250px; height: 500px">
@@ -275,13 +276,13 @@
           <label><input type="radio" name="labActivateFn" value="tanh" checked="checked">Tanh</label>
           <label><input type="radio" name="labActivateFn" value="sigmoid">Sigmoid</label>
         </div>
-        <div>
-          With more layers/hidden nodes you should start to see the network overfit the training points. Also, be aware that the larger the network, the longer it takes to train - so be patient!
-        </div>
       </div>
       <br style="clear: left;" />
-      <div style="text-align: center; width: 1000px; margin: 0 auto; font-size: 14px;">
+      <div style="text-align: center; width: 1000px; margin: 10px auto; font-size: 14px;">
         Fork this code on <a href="https://github.com/flynnhe">Github</a>.
+      </div>
+      <div>
+        This network is learning to map an input x to an output y by minimising the squared difference between the two. The optimisation is being done using stochastic gradient descent (using one training example to update the weights). Stochastic gradient descent tends to take a zig zag route to the minimum and this explains the oscillations during training. These can be reduced by lowering the learning rate, but too low of a learning rate means it will take longer to converge. The more complex the network, the more likely it is to overfit the training points and be unable to generalise to new ones. Also, be aware that the larger the network, the longer it takes to train - so be patient!
       </div>
     </div>
   </div>
